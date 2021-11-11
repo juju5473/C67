@@ -1,0 +1,386 @@
+---
+title: "CGPA"
+author: "Group 21"
+date: "04/04/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
+```
+
+The objective of this study is to determine which socio-economic and demographic factors have
+impact on students’ cumulative grade point average. 
+
+# Libraries Used 
+```{r}
+library(tidyverse)
+library(plyr)
+library(dplyr)
+library(readxl)
+library(caret)
+library(stats)
+library(ggplot2)
+library(ggpubr)
+library(olsrr)
+```
+
+```{r}
+setwd("~/Downloads")
+gpa <- read_excel("GPAdata.xlsx", col_names = T)
+gpa
+summary(gpa)
+```
+
+# **Initial Data Analysis**
+
+### **Distribution of numerical variables**
+
+**Distribution of Credit**
+```{r,message = FALSE, warning = FALSE}
+ggplot(data = gpa) +
+  geom_histogram(aes(x = Credit, fill = 'red'), col = 'black',show.legend = FALSE)
+
+ggplot(data = gpa) + 
+  geom_boxplot(aes(x = Credit), fill = 'skyblue' ,show.legend = FALSE)
+
+```
+
+The distribution of Credit is approximately symmetrical bell curve with very few outliers. There are about 4 outliers towards the right and 1 outlier at the left end of the distribution
+
+**Distribution of CGPA**
+```{r, message = FALSE, warning = FALSE}
+ggplot(data = gpa) +
+  geom_histogram(aes(x = CGPA, fill = 'red'), col = 'black', show.legend = FALSE)
+
+ggplot(data = gpa) + 
+  geom_boxplot(aes(x = CGPA), fill = 'skyblue' ,show.legend = FALSE)
+
+```
+
+The distribution of Credit is left skewed with very few outliers. There are about 4 outliers towards left end of the distribution.
+
+###  **Distribution of categorical variables**
+
+First, we define a function 'catplot()' that takes a categorical column and displays the bar plot of the distribution 
+
+```{r, message = FALSE, warning = FALSE}
+catplot = function(var){
+ 
+ggplot(data = gpa) +
+geom_bar(aes(x = get(var), y = (..count..)/sum(..count..), fill = 'red'), col = 'Black',show.legend = FALSE)+  xlab(as.character(var)) + ggtitle(paste0(" Bar plot of ", as.character(var)))+
+theme_bw() + ylab("")
+  
+}
+
+```
+
+Run the same with different categorical variables.
+
+```{r, message = FALSE, warning = FALSE}
+p1 = catplot("Year")
+p2 = catplot("Gender")
+p3 = catplot("Status")
+p4 = catplot("Major")
+p5 = catplot("CommuteTime")
+p6 = catplot("LiveFamily")
+p7 = catplot("Interest")
+p8 = catplot("SocialAct")
+p9 = catplot("FamilyExp")
+p10 = catplot("WeekWork")
+
+gridExtra::grid.arrange(p1,p2,p3,p4, ncol = 2, nrow = 2)
+gridExtra::grid.arrange(p5,p6,p7,p8, ncol = 2, nrow = 2)
+gridExtra::grid.arrange(p9, p10, ncol = 1, nrow = 2)
+
+```
+# Correlation among variables
+```{r}
+#install.packages("corrplot")
+#library(corrplot)
+#head(gpa)
+#gpa <- subset(gpa, select = -Year)
+#M <- cor(gpa)
+#corrplot(M, method = "circle", type = "upper")
+```
+
+
+```{r}
+reg <- lm(CGPA ~ Credit + Year + Gender + Status + Major + CommuteTime + LiveFamily + Interest + SocialAct + FamilyExp + WeekWork, data = gpa)
+anova(reg)
+```
+
+```{r}
+colSums(is.na(gpa))
+```
+
+
+```{r}
+gpa$Year <- factor(gpa$Year, order = TRUE,levels =c('3','4'))
+gpa$Gender <- factor(gpa$Gender, levels = c('1','2','3'))
+gpa$Status <- factor(gpa$Status, levels = c('0','1'))
+gpa$Major <- factor(gpa$Major, levels = c('1','2','3'))
+gpa$CommuteTime <- factor(gpa$CommuteTime, order = TRUE,levels = c('0','1','2','3','4','5'))
+gpa$LiveFamily <- factor(gpa$LiveFamily, levels = c('0','1'))
+gpa$Interest <- factor(gpa$Interest, order = TRUE,levels= c('1','2','3','4','5'))
+gpa$SocialAct <- factor(gpa$SocialAct, order = TRUE, levels = c('1','2','3','4','5'))
+gpa$FamilyExp <- factor(gpa$FamilyExp, order = TRUE, levels = c('1','2','3','4','5'))
+gpa$WeekWork <- factor(gpa$WeekWork, order = TRUE)
+gpa$WeekWork <- revalue(gpa$WeekWork,  c('15'="3",'18' = "4",'20'="4",'10'="2",'8' = "2",'30' = "5"))
+```
+
+```{r}
+gpa %>% drop_na(Year) -> gpa
+gpa %>% drop_na(Gender) -> gpa
+gpa %>% drop_na(Status) -> gpa
+colSums(is.na(gpa))
+```
+
+```{r}
+classes <- sapply(gpa,class)
+classes
+```
+
+```{r}
+set.seed(1234)
+gpa.sample <- sample(1:length(gpa$ID), 350, replace = FALSE)
+train <- gpa[gpa.sample,]
+test <- gpa[-gpa.sample,]
+```
+
+Model
+```{r}
+regR <- lm(CGPA ~ Credit + Year + Gender + Status + Major + CommuteTime + 
+            LiveFamily + Interest + SocialAct + FamilyExp + 
+            WeekWork,data = train)
+anovaR <- anova(regR)
+anovaR
+```
+
+```{r}
+regF <- lm(CGPA ~ Credit + Year + Gender + Status + Major + CommuteTime + 
+            LiveFamily + Interest + SocialAct + FamilyExp + WeekWork +
+            Credit:Year + Credit:Gender + Credit:Status + Credit:Major +
+            Credit:CommuteTime + Credit:LiveFamily + Credit:Interest + 
+            Credit:SocialAct + Credit:FamilyExp + Credit:WeekWork, data = train)
+anovaF <- anova(regF)
+anovaF
+```
+
+Null hypothesis: coefficients of all interaction terms is equal to 0
+Alternative hypothesis: at least one is not equal to 0
+```{r}
+SSEr <-anovaR$'Sum Sq'[12]
+dfr <- anovaR$'Df'[12]
+SSEf <- anovaF$'Sum Sq'[22]
+dff <- anovaF$'Df'[22]
+MSEf <-anovaF$'Mean Sq'[22]
+
+fstat <- ((SSEr-SSEf)/(dfr-dff))/MSEf
+pf(fstat, df1=dfr-dff, df2=dff, lower.tail = F)
+#fail to reject null hypothesis, no significanct value to the interaction terms
+# as part of the model
+```
+
+Final Model: CGPA ~ Credit + Major + CommuteTime + Interest + SocialAct
+```{r}
+library(MASS)
+step <- stepAIC(regR, direction = "both"); step$anova
+```
+```{r}
+final <- lm(CGPA ~ Credit + Major + CommuteTime + Interest + SocialAct, 
+            data = train)
+anova(final)
+```
+
+Validation MSE = 0.3093, MSPR = 0.29716, Since MSPR is approximately the same
+as MSE then the final model is a valid selection to represent this 
+relationship.
+```{r}
+pred <- predict(final, test[,c(3,7,8,10,11)])
+delta <- gpa$CGPA[-gpa.sample]-pred
+n.star <- dim(test)[1]
+MSPR <- sum(delta^2)/n.star
+MSPR
+```
+
+From the residual plot, you 
+can see that the residuals do not look like a random scatter, they seem to be
+more concentrated near the center of the graph, indicating potential non-constant variance.
+The Normal Q-Q plot is not close to the line(y=x) near the top right most of the graph. 
+So after conducting the Shapiro-Wilk test,
+where the null hypothesis is that the residuals are normally distributed in some
+population, the p-value =  0.01062 < 0.05. Thus, we reject the null-hypothesis and conclude that the residuals are 
+not normally distributed in some population. In conclusion, this final model is not a good fit
+to the data because the linearity assumption and non-constant variance may not be upheld.
+```{r}
+fit.resid <- final$residuals
+fit.values <- final$fitted.values
+plot(fit.values, fit.resid)
+abline(0,0)
+
+qqnorm(fit.resid)
+qqline(fit.resid)
+
+shapiro.test(fit.resid)
+```
+
+
+```{r}
+library(MASS)
+result = boxcox(final)
+mylambda = result$x[which.max(result$y)]
+mylambda
+
+final2 <-lm(CGPA^(mylambda) ~ Credit + Major + CommuteTime + Interest + SocialAct, 
+            data = train)
+```
+
+Boxcox transformation didn't work.
+```{r}
+fit.resid <- final2$residuals
+fit.values <- final2$fitted.values
+plot(fit.values, fit.resid)
+abline(0,0)
+
+qqnorm(fit.resid)
+qqline(fit.resid)
+
+shapiro.test(fit.resid)
+```
+
+```{r}
+train$s.hat <- abs(final$residuals)
+fit2 <- lm(s.hat~Credit + Major + CommuteTime + Interest + SocialAct, 
+            data = train)
+train$var.s <- (predict(fit2))^2
+
+fit3 <- lm(CGPA~Credit + Major + CommuteTime + Interest + SocialAct, 
+           weights = 1/var.s,
+           data = train)
+fit.resid <- fit3$residuals
+fit.values <- fit3$fitted.values
+plot(fit.values, fit.resid)
+abline(0,0)
+
+qqnorm(fit.resid)
+qqline(fit.resid)
+
+shapiro.test(fit.resid)
+```
+
+# Deleted Studentized Residual
+```{r}
+t <- rstudent(final)
+alpha <- 0.05
+n <- dim(train)[1]
+p.prime <- length(coef(final))
+t.crit <- qt(1-alpha/(2*n),n-p.prime-1)
+round(t,2)
+```
+
+Since named integer(0) was returned after performing studentized deleted 
+residuals test, therefore, none of these observations is an outlying CGPA 
+observation.
+```{r}
+t.crit
+which(abs(t) > t.crit)
+```
+
+```{r}
+hii <- hatvalues(final)
+round(hii,2)
+```
+
+```{r}
+which(hii > 2*p.prime/n)
+```
+
+```{r}
+which(hii > 0.5)
+```
+
+# Influential Observations
+```{r}
+DFFITS = dffits(final)
+which(DFFITS >1)
+```
+
+```{r}
+D = cooks.distance(final)
+which(D > qf(0.2, p.prime, n-p.prime))
+```
+
+```{r}
+DFFBETAS = dfbetas(final)
+head(DFFBETAS)
+```
+```{r}
+which(DFFBETAS > 1)
+```
+
+# Multicollinearity
+Since there is no VIF value that exceeds 10, we can conclude that there is no indicative of serious multicollinearity
+```{r}
+library(car)
+VIF = vif(final)
+VIF
+```
+```{r}
+VIFbar = mean(VIF)
+VIFbar
+```
+
+# Lecture 21 slide 5
+```{r}
+t.rstandard <- t
+t.rstudent <- rstudent(final)
+t.inf <- influence.measures(final)
+cbind(t.rstandard, t.rstudent)
+```
+# provides measures of detecting influential observation
+```{r}
+t.inf
+```
+
+# Graphical diagnostics
+```{r}
+i1 <- ols_plot_cooksd_chart(final) # cook's distance
+```
+
+
+```{r}
+i2 <- ols_plot_resid_stud(final) # Deleted studentized residual
+```
+
+
+```{r}
+i3 <- ols_plot_dfbetas(final) # DFbetas
+```
+
+
+```{r}
+i4 <- ols_plot_dffits(final) # DIFFITS
+```
+
+
+```{r}
+i5 <- ols_plot_resid_lev(final) # Studentized residual vs Leverages
+```
+
+
+```{r}
+i6 <- ols_plot_resid_stud_fit(final) # Deleted studentized residual vs predicted value
+```
+
+```{r}
+ggarrange(i1, i2, ncol = 2, nrow = 1)
+```
+
+```{r}
+i3
+```
+```{r}
+ggarrange(i4, i5, i6, ncol = 2, nrow = 2)
+```
+
